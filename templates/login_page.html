@@ -1,19 +1,27 @@
 <!DOCTYPE html>
-
-<index class="html">
-    <head><link rel="stylesheet" href="static/style.css"></head>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
     <div class="header">
         <a href="/" class="logo">Physio Bookings</a>
         <div class="header-right">
-          <a href="/">Home</a>
-          <a class="active" href="/login_page">Login</a>
-          <a href="/register_form">Register</a>
+            <a href="/">Home</a>
+            <a class="active" href="/login_page">Login</a>
+            <a href="/register_form">Register</a>
         </div>
-      </div>
-<body>
-<h1>Login</h1>
-<p>Email: </p>
-<p>Password: </p>
+    </div>
+    <h1>Login</h1>
+    <form action="/login" method="post">
+        <label for="email">Email:</label>
+        <input type="text" id="email" name="email" required>
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required>
+        <input type="submit" value="Login">
+    </form>
 </body>
-
-</index>
+</html>

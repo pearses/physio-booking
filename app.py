@@ -1,12 +1,11 @@
 from flask import Flask, render_template, request, jsonify, session, redirect
 from models import User, Appointment
 from dto.appointment_dto import AppointmentDTO
-from datetime import date, time
+from datetime import datetime, timedelta
 
 
 app = Flask(__name__)
 app.secret_key = "P@ssword123"
-
 users = [] # Swap with database integration
 
 # --- User Login Service ---
@@ -54,65 +53,99 @@ appointment_service = AppointmentService()
 def home_page():
     return render_template("index.html", title=home_page)
 
+
 @app.route('/login_page')
 def login_page():
     return render_template("login_page.html", title=login)
+
 
 @app.route('/register_form')
 def register_page():
     return render_template("register_form.html", title=register)
 
+
+@app.route('/user_portal')
+def user_portal():
+    logged_in_user_email = session.get('user_email', None)
+
+    if not logged_in_user_email:
+        return jsonify({'message': 'User not logged in.'}), 401
+
+    # Get the user's booked appointments
+    booked_appointments = [appointment for appointment in appointment_service.get_appointments() if appointment.patient_name == logged_in_user_email]
+
+    # Generate available times from 9 am to 5 pm in 1-hour increments
+    available_times = []
+    start_time = datetime.strptime('09:00', '%H:%M')
+    end_time = datetime.strptime('17:00', '%H:%M')
+    current_time = start_time
+
+    while current_time <= end_time:
+        if appointment_service.time_slot_available(current_time.strftime('%Y-%m-%d'), current_time.strftime('%H:%M')):
+            available_times.append(current_time.strftime('%H:%M'))
+        current_time += timedelta(hours=1)
+
+    return render_template('user_portal.html', title='User Portal', booked_appointments=booked_appointments, available_times=available_times)
+
+
 # User register
-@app.route('/register', methods=['POST'])
+@app.route('/register', methods=['GET', 'POST'])
 def register():
-    data = request.get_json()
-    email = data['email']
-    password = data['password']
-    patient_name = data['patient_name']
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+        patient_name = request.form.get('patient_name')
 
-    # Basic validation: Check if email and password are not empty
-    if not email or not password:
-        return jsonify({'message': 'Email, password and patient_name are required.'}), 400
+        # Basic validation: Check if email and password are not empty
+        if not email or not password:
+            return jsonify({'message': 'Email, password and patient_name are required.'}), 400
 
-    # Validate email format (you can use a more robust email validation method)
-    if '@' not in email:
-        return jsonify({'message': 'Invalid email format.'}), 400
+        # Validate email format (you can use a more robust email validation method)
+        if '@' not in email:
+            return jsonify({'message': 'Invalid email format.'}), 400
 
-    # Validate password (you can implement a stronger password policy)
-    if len(password) < 6:
-        return jsonify({'message': 'Password must be at least 6 characters long.'}), 400
+        # Validate password (you can implement a stronger password policy)
+        if len(password) < 6:
+            return jsonify({'message': 'Password must be at least 6 characters long.'}), 400
 
-    # Check if the user with the provided email already exists
-    if any(user.email == email for user in users):
-        return jsonify({'message': 'Email already registered.'}), 400
+        # Check if the user with the provided email already exists
+        if any(user.email == email for user in users):
+            return jsonify({'message': 'Email already registered.'}), 400
 
-    user_id = len(users) + 1
-    new_user = User(user_id, email, password, patient_name)
-    users.append(new_user)
+        user_id = len(users) + 1
+        new_user = User(user_id, email, password, patient_name)
+        users.append(new_user)
 
-    # Set up a session for the newly registered user
-    session['user_id'] = new_user.user_id
+        # Set up a session for the newly registered user
+        session['user_id'] = new_user.user_id
 
-    return jsonify({'message': 'Registration successful.'}), 201
+        # Redirect to the login page after successful registration
+        return redirect('/login_page')
+
+    return render_template('register_form.html', title='Register')
 
 
 # User login route
-@app.route('/login', methods=['POST'])
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-    data = request.get_json()
-    email = data.get('email')
-    password = data.get('password')
+        data = request.form
+        email = data.get('email')
+        password = data.get('password')
 
-    # Check if the provided credentials are valid
-    user = verify_user_credentials(email, password)
+        # Check if the provided credentials are valid
+        user = verify_user_credentials(email, password)
 
-    if user:
-        # Set up a session for the authenticated user
-        session['user_id'] = user.user_id
-        session['user_email'] = user.email
-        return jsonify({'message': 'Login successful.'}), 200
-    else:
-        return jsonify({'message': 'Invalid credentials.'}), 401
+        if user:
+            # Set up a session for the authenticated user
+            session['user_id'] = user.user_id
+            session['user_email'] = user.email
+            
+            # Redirects
+            return redirect('/user_portal')
+        else:
+            return jsonify({'message': 'Invalid credentials.'}), 401
+
+
     
 
 # User Logout route
@@ -141,36 +174,35 @@ def delete_user(user_id):
         return jsonify({'message': 'User not found.'}), 404
     
 
-
-
 @app.route('/appointments', methods=['POST'])
 def create_appointment():
-    logged_in_user = session.get('user_email', None)
+    if 'user_id' not in session:
+        return jsonify({'message': 'You need to be logged in to create an appointment.'}), 401
+
+    logged_in_user_id = session['user_id']
+    logged_in_user = next((user for user in users if user.user_id == logged_in_user_id), None)
 
     if not logged_in_user:
-        return jsonify({'message': 'User not logged in.'}), 401
+        return jsonify({'message': 'Invalid user. Please log in again.'}), 401
 
-    data = request.get_json()
-    appointment_dto = AppointmentDTO(**data) 
+    data = request.form
+    date = data.get('date')
+    time = data.get('time')
 
-    # Create the appointment with the patient_name from the logged-in user
-    appointment, error_message = appointment_service.create_appointment(
-        appointment_dto.date,
-        appointment_dto.time,
-        logged_in_user  # Use the patient_name fetched from the logged-in user
-    )
+    # Check if the selected date and time are available
+    if not appointment_service.time_slot_available(date, time):
+        return jsonify({'message': 'The selected date and time are not available.'}), 409
+
+    # Create an AppointmentDTO using the logged-in user's patient_name
+    appointment_dto = AppointmentDTO(date, time, logged_in_user.patient_name)
+
+    appointment, error_message = appointment_service.create_appointment(appointment_dto)
 
     if appointment:
-        return jsonify(appointment.__dict__)
+        return jsonify({'message': 'Appointment created successfully.'}), 201
     else:
         return jsonify({'message': error_message}), 400
-    
 
-@app.route('/appointments', methods=['GET'])
-def view_appointments():
-    appointments = appointment_service.get_appointments()
-    appointment_data = [appointment.__dict__ for appointment in appointments]
-    return jsonify(appointment_data)
 
 @app.route('/appointments/<int:appointment_id>', methods=['DELETE'])
 def cancel_appointment(appointment_id):
@@ -178,6 +210,13 @@ def cancel_appointment(appointment_id):
     if canceled:
         return jsonify({'message': 'Appointment canceled successfully.'}), 200
     return jsonify({'message': 'Appointment not found.'}), 404
+
+
+# Serve the static CSS file
+@app.route('/static/style.css')
+def serve_css():
+    return app.send_static_file('style.css')
+
 
 #USE FOR FUTURE IMPLEMENTATION
 #

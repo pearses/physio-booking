@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>User Portal</title>
+</head>
+<body>
+    <h1>Welcome to the User Portal</h1>
+    <h2>Booked Appointments</h2>
+    <ul>
+        {% for appointment in booked_appointments %}
+            <li>{{ appointment.date }} at {{ appointment.time }} with {{ appointment.patient_name }}</li>
+        {% endfor %}
+    </ul>
+
+    <h2>Available Times</h2>
+    <form action="/appointments" method="post">
+        <label for="date">Choose a date:</label>
+        <input type="date" id="date" name="date" required>
+        <label for="time">Choose a time:</label>
+        <select id="time" name="time" required>
+            {% for time in available_times %}
+                <option value="{{ time }}">{{ time }}</option>
+            {% endfor %}
+        </select>
+        <input type="submit" value="Book Appointment">
+    </form>
+</body>
+</html>
