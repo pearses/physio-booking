@@ -27,12 +27,12 @@ class AppointmentService:
                 return False
         return True
 
-    def create_appointment(self, date, time, patient_name):
+    def create_appointment(self, date, time, logged_in_user):
         if not self.time_slot_available(date, time):
             return None, 'This time slot is no longer available'
 
         appointment_id = len(self.appointments) + 1
-        appointment = Appointment(appointment_id, date, time, patient_name)
+        appointment = Appointment(appointment_id, date, time, logged_in_user)
         self.appointments.append(appointment)
         return appointment, None
 
@@ -145,17 +145,19 @@ def delete_user(user_id):
 
 @app.route('/appointments', methods=['POST'])
 def create_appointment():
-    logged_in_user_email = session.get('user_email', None)
+    logged_in_user = session.get('user_email', None)
 
-    if not logged_in_user_email:
+    if not logged_in_user:
         return jsonify({'message': 'User not logged in.'}), 401
-    
+
     data = request.get_json()
-    appointment_dto = AppointmentDTO(**data)
+    appointment_dto = AppointmentDTO(**data) 
+
+    # Create the appointment with the patient_name from the logged-in user
     appointment, error_message = appointment_service.create_appointment(
         appointment_dto.date,
         appointment_dto.time,
-        appointment_dto.patient_name
+        logged_in_user  # Use the patient_name fetched from the logged-in user
     )
 
     if appointment:
